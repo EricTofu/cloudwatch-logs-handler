@@ -1,0 +1,111 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: CloudWatch Logs monitoring Lambda with DynamoDB configuration
+
+Parameters:
+  Environment:
+    Type: String
+    Default: dev
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+  ScheduleExpression:
+    Type: String
+    Default: "rate(5 minutes)"
+    Description: EventBridge schedule for log monitoring
+
+  CriticalSnsTopicArn:
+    Type: String
+    Description: SNS topic ARN for critical alerts
+
+  WarningSnsTopicArn:
+    Type: String
+    Description: SNS topic ARN for warning alerts
+
+  InfoSnsTopicArn:
+    Type: String
+    Description: SNS topic ARN for info alerts
+
+Globals:
+  Function:
+    Runtime: python3.12
+    Timeout: 300
+    MemorySize: 512
+
+Resources:
+  # ---------- DynamoDB ----------
+  LogMonitorTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: log-monitor
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Environment
+          Value: !Ref Environment
+
+  # ---------- Lambda ----------
+  LogMonitorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "log-monitor-${Environment}"
+      Handler: log_monitor.handler.handler
+      CodeUri: src/
+      Description: CloudWatch Logs keyword monitoring with DynamoDB configuration
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+      Policies:
+        # DynamoDB read/write
+        - DynamoDBCrudPolicy:
+            TableName: !Ref LogMonitorTable
+        # CloudWatch Logs read
+        - Statement:
+            - Effect: Allow
+              Action:
+                - logs:FilterLogEvents
+                - logs:DescribeLogGroups
+                - logs:DescribeLogStreams
+              Resource: "arn:aws:logs:*:*:log-group:*"
+        # SNS publish
+        - Statement:
+            - Effect: Allow
+              Action:
+                - sns:Publish
+              Resource:
+                - !Ref CriticalSnsTopicArn
+                - !Ref WarningSnsTopicArn
+                - !Ref InfoSnsTopicArn
+        # CloudWatch metrics
+        - Statement:
+            - Effect: Allow
+              Action:
+                - cloudwatch:PutMetricData
+              Resource: "*"
+      Events:
+        ScheduledMonitoring:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Description: Trigger log monitoring every 5 minutes
+            Enabled: true
+
+Outputs:
+  LogMonitorFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt LogMonitorFunction.Arn
+
+  LogMonitorTableName:
+    Description: DynamoDB table name
+    Value: !Ref LogMonitorTable

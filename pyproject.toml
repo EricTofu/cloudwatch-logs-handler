@@ -1,0 +1,17 @@
+[project]
+name = "cloudwatch-logs-handler"
+version = "1.0.0"
+description = "CloudWatch Logs monitoring Lambda with DynamoDB configuration"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
