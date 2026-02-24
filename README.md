@@ -55,6 +55,7 @@ Contains defaults, logging boundaries, and base SNS topics.
   "sk": "CONFIG",
   "source_log_group": "/aws/app/shared-logs",
   "metric_namespace": "LogMonitor",
+  "disable_custom_metrics": false,
   "defaults": {
     "severity": "warning",
     "renotify_min": 60,

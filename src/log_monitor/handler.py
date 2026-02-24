@@ -119,13 +119,14 @@ def handler(event, context):
 
             results["total_detections"] += len(matches)
 
-            # 4. Send metrics (always, even if 0)
-            put_metric_data(
-                namespace=global_config.get("metric_namespace", "LogMonitor"),
-                project=project_sk,
-                keyword=keyword,
-                value=len(matches),
-            )
+            # 4. Send metrics (always, even if 0, unless explicitly disabled)
+            if not global_config.get("disable_custom_metrics", False):
+                put_metric_data(
+                    namespace=global_config.get("metric_namespace", "LogMonitor"),
+                    project=project_sk,
+                    keyword=keyword,
+                    value=len(matches),
+                )
 
             # 5. Evaluate state transition
             state = find_state(states, project_sk, keyword)

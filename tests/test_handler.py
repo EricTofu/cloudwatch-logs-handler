@@ -115,6 +115,57 @@ class TestHandler:
     @patch("log_monitor.handler.filter_log_events_with_pagination")
     @patch("log_monitor.handler.sns_publish")
     @patch("log_monitor.handler.put_metric_data")
+    def test_metrics_disabled(self, mock_put_metric, mock_sns, mock_filter, mock_boto3):
+        """Test put_metric_data is conditionally disabled."""
+        dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
+        table = dynamodb.create_table(
+            TableName="log-monitor",
+            KeySchema=[
+                {"AttributeName": "pk", "KeyType": "HASH"},
+                {"AttributeName": "sk", "KeyType": "RANGE"},
+            ],
+            AttributeDefinitions=[
+                {"AttributeName": "pk", "AttributeType": "S"},
+                {"AttributeName": "sk", "AttributeType": "S"},
+            ],
+            BillingMode="PAY_PER_REQUEST",
+        )
+        table.meta.client.get_waiter("table_exists").wait(TableName="log-monitor")
+
+        table.put_item(
+            Item={
+                "pk": "GLOBAL",
+                "sk": "CONFIG",
+                "source_log_group": "/aws/app/shared-logs",
+                "metric_namespace": "LogMonitor",
+                "disable_custom_metrics": True,  # Key metric disable flag
+                "defaults": {"severity": "warning", "renotify_min": 60, "notify_on_recover": True},
+                "sns_topics": {},
+                "notification_template": {"subject": "sub", "body": "body"},
+            }
+        )
+
+        table.put_item(
+            Item={
+                "pk": "PROJECT",
+                "sk": "project-a",
+                "enabled": True,
+                "monitors": [{"keyword": "ERROR", "severity": "critical"}],
+            }
+        )
+
+        mock_boto3.resource.return_value = dynamodb
+        mock_filter.return_value = [{"message": "ERROR: fail"}]
+
+        handler({}, None)
+
+        mock_put_metric.assert_not_called()
+
+    @mock_aws
+    @patch("log_monitor.handler.boto3")
+    @patch("log_monitor.handler.filter_log_events_with_pagination")
+    @patch("log_monitor.handler.sns_publish")
+    @patch("log_monitor.handler.put_metric_data")
     def test_disabled_project_skipped(self, mock_put_metric, mock_sns, mock_filter, mock_boto3):
         """Disabled projects should be completely skipped."""
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
