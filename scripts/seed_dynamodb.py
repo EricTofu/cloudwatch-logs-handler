@@ -28,7 +28,7 @@ GLOBAL_CONFIG = {
     },
     "notification_template": {
         "subject": "[{severity}] {project} - {keyword} 検出",
-        "body": ("🚨 *{project}* で *{keyword}* が {count}件 検出\n⏰ {detected_at}\n📁 {log_group}\n---\n{log_lines}"),
+        "body": ("*{project}* で *{keyword}* が {count}件 検出\n{detected_at}\n{log_group}\n---\n{log_lines}"),
     },
 }
 
@@ -57,7 +57,7 @@ SAMPLE_PROJECT = {
             "override_sns_topic": "arn:aws:sns:ap-northeast-1:123456789012:team-b-alerts",
             "notification_template": {
                 "subject": "[OOM] Project Alpha - 緊急",
-                "body": "💀 *OOM 発生！*\n即時対応が必要です\n---\n{log_lines}",
+                "body": "*OOM 発生！*\n即時対応が必要です\n---\n{log_lines}",
             },
         },
     ],
@@ -87,9 +87,9 @@ def seed(table_name, region):
         # Convert None values to appropriate DynamoDB format
         clean = json.loads(json.dumps(record, default=str), parse_float=str)
         table.put_item(Item=clean)
-        print(f"✅ Inserted: pk={clean['pk']}, sk={clean['sk']}")
+        print(f"Inserted: pk={clean['pk']}, sk={clean['sk']}")
 
-    print(f"\n🎉 Seeded {len(records)} records into {table_name}")
+    print(f"\nSeeded {len(records)} records into {table_name}")
 
 
 def main():

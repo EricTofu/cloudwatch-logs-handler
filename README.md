@@ -84,6 +84,9 @@ Contains defaults, logging boundaries, and base SNS topics.
     "critical": "arn:aws:sns:REGION:ACCOUNT:critical-topic",
     "warning": "arn:aws:sns:REGION:ACCOUNT:warning-topic",
     "info": "arn:aws:sns:REGION:ACCOUNT:info-topic"
+  },
+  "notification_template": {
+    "subject": "[{severity}] {project} - {keyword} 検出"
   }
 }
 ```
@@ -140,7 +143,12 @@ Here is a complete example showing all available configuration options, includin
       "context_log_lines": 10,
       
       "//": "Optional: Exclude specific patterns for this monitor",
-      "exclude_patterns": ["known-issue-ignore"]
+      "exclude_patterns": ["known-issue-ignore"],
+      
+      "//": "Optional: Custom notification template (subject only)",
+      "notification_template": {
+        "subject": "[🚨 CRITICAL] {keyword} observed in {project}"
+      }
     }
   ],
   
@@ -148,6 +156,23 @@ Here is a complete example showing all available configuration options, includin
   "exclude_patterns": ["debug-log-noise"]
 }
 ```
+
+### Notification Templates
+
+The notification template dictates how the subject line of the SNS message (and Slack alert) is formatted. The message `body` is automatically generated and standardized by the application and cannot be overridden.
+
+You can set `notification_template` at the **GLOBAL**, **PROJECT**, or **MONITOR** level (highest priority wins).
+
+**Available Variables in `subject`:**
+- `{project}`: The display name or ID of the project
+- `{keyword}`: The keyword that triggered the monitor
+- `{severity}`: The severity level (e.g., CRITICAL, WARNING)
+- `{count}`: Number of log lines matched
+- `{detected_at}`: Timestamp of detection (JST)
+- `{log_group}`: The CloudWatch Logs group
+- `{stream_name}`: The CloudWatch Log stream names
+- `{log_lines}`: The actual log contents
+- `{streak}`: The current consecutive detection streak count
 
 ## Local Testing & Development
 
