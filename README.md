@@ -22,7 +22,9 @@ Centralized CloudWatch Logs monitoring solution driven by DynamoDB configuration
 
 ## Deployment Environment
 
-This project is deployed using AWS SAM (Serverless Application Model).
+This project supports two deployment methods: AWS SAM (Serverless Application Model) and Terraform. **Since the Lambda function only requires `boto3` (which is built into the Lambda environment), Terraform can upload the source code directly without a heavy build step.**
+
+### Option A: AWS SAM
 
 ```bash
 # Validate SAM template
@@ -33,6 +35,23 @@ sam build
 
 # Deploy to AWS (Guided)
 sam deploy --guided
+```
+
+### Option B: Terraform (Recommended for simple code changes)
+
+Terraform will automatically zip the `src/` directory and calculate its hash, meaning it will only update the Lambda function natively when Python code genuinely changes—eliminating the need for slow builds.
+
+```bash
+cd terraform/
+
+# Initialize Terraform providers
+terraform init
+
+# Review the infrastructure changes
+terraform plan
+
+# Deploy changes to AWS
+terraform apply
 ```
 
 ## Setup & Configuration
