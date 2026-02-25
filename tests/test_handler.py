@@ -140,7 +140,11 @@ class TestHandler:
                 "metric_namespace": "LogMonitor",
                 "disable_custom_metrics": True,  # Key metric disable flag
                 "defaults": {"severity": "warning", "renotify_min": 60, "notify_on_recover": True},
-                "sns_topics": {},
+                "sns_topics": {
+                    "critical": "arn:aws:sns:dummy:critical",
+                    "warning": "arn:aws:sns:dummy:warning",
+                    "info": "arn:aws:sns:dummy:info",
+                },
                 "notification_template": {"subject": "sub", "body": "body"},
             }
         )

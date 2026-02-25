@@ -69,8 +69,7 @@ def global_config_item():
         "notification_template": {
             "subject": "[{severity}] {project} - {keyword} 検出",
             "body": (
-                "🚨 *{project}* で *{keyword}* が {count}件 検出\n"
-                "⏰ {detected_at}\n📁 {log_group}\n---\n{log_lines}"
+                "🚨 *{project}* で *{keyword}* が {count}件 検出\n⏰ {detected_at}\n📁 {log_group}\n---\n{log_lines}"
             ),
         },
     }
