@@ -90,8 +90,8 @@ class TestRenderMessage:
         project = {"sk": "project-a", "display_name": "Project Alpha", "source_log_group": "/aws/app/shared-logs"}
         monitor = {"keyword": "ERROR", "severity": "critical", "mention": "<!here>"}
         matches = [
-            {"message": "ERROR: db failed", "logStreamName": "project-a/s1"},
-            {"message": "ERROR: timeout", "logStreamName": "project-a/s1"},
+            {"message": "ERROR: db failed", "logStreamName": "project-a/s1", "timestamp": 1709218536000},
+            {"message": "ERROR: timeout", "logStreamName": "project-a/s1", "timestamp": 1709218537000},
         ]
         global_config = {
             "source_log_group": "/aws/app/shared-logs",

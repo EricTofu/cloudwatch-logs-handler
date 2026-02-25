@@ -87,6 +87,14 @@ def render_message(template, project, monitor, matches, action, global_config, s
         dict: Rendered message with "subject" and "body" keys.
     """
     now_jst = datetime.now(JST)
+
+    # Use the timestamp of the latest matched log event if available, otherwise fallback to current time
+    if matches and "timestamp" in matches[-1]:
+        dt = datetime.fromtimestamp(matches[-1]["timestamp"] / 1000.0, tz=JST)
+        detected_at_str = dt.strftime("%Y-%m-%d %H:%M:%S JST")
+    else:
+        detected_at_str = now_jst.strftime("%Y-%m-%d %H:%M:%S JST")
+
     severity = (monitor.get("severity") or global_config["defaults"]["severity"]).upper()
     log_group = project.get("override_log_group") or global_config.get("source_log_group", "")
     max_lines = int(global_config.get("max_log_lines", 20))
@@ -112,7 +120,7 @@ def render_message(template, project, monitor, matches, action, global_config, s
         "keyword": monitor.get("keyword", ""),
         "severity": severity,
         "count": str(len(matches)),
-        "detected_at": now_jst.strftime("%Y-%m-%d %H:%M:%S JST"),
+        "detected_at": detected_at_str,
         "log_group": log_group,
         "stream_name": ", ".join(stream_names),
         "log_lines": log_lines if log_lines else "(ログなし)",
