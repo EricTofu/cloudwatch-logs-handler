@@ -1,5 +1,6 @@
 """SNS notification with 3-level fallback resolution and template rendering."""
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 
@@ -65,7 +66,7 @@ def resolve_template(monitor, project, global_config):
     )
 
 
-def render_message(template, project, monitor, matches, action, global_config, state=None):
+def render_message(template, project, monitor, matches, action, global_config, state=None, previous_log_lines=None):
     """Render notification message by expanding template variables.
 
     Template variables:
@@ -73,13 +74,14 @@ def render_message(template, project, monitor, matches, action, global_config, s
         {log_group}, {stream_name}, {log_lines}, {streak}
 
     Args:
-        template: Template dict with "subject" and "body".
+        template: Template dict with "subject". "body" is ignored and hardcoded.
         project: Project configuration dict.
         monitor: Monitor configuration dict.
         matches: List of matching log events.
         action: Action string (NOTIFY, RENOTIFY, RECOVER).
         global_config: GLOBAL configuration dict.
         state: Current STATE record (optional).
+        previous_log_lines: List of previous log lines (optional).
 
     Returns:
         dict: Rendered message with "subject" and "body" keys.
@@ -93,9 +95,17 @@ def render_message(template, project, monitor, matches, action, global_config, s
     stream_names = sorted(set(e.get("logStreamName", "") for e in matches)) if matches else []
     log_lines = "\n".join(e.get("message", "").rstrip() for e in matches[:max_lines])
 
+    # Extract previous log lines
+    prev_logs_text = "(なし)"
+    if previous_log_lines:
+        prev_logs_text = "\n".join(previous_log_lines)
+
     streak = 0
     if state:
         streak = state.get("current_streak", 0)
+
+    # Optional mention
+    mention = monitor.get("mention") or project.get("mention") or ""
 
     variables = {
         "project": project.get("display_name", project.get("sk", "")),
@@ -109,18 +119,40 @@ def render_message(template, project, monitor, matches, action, global_config, s
         "streak": str(streak),
     }
 
+    # Subject is templated
     # Use action-specific template adjustments for RECOVER
     if action == "RECOVER":
         subject = template.get("subject", "").replace("{severity}", "RECOVER")
-        body = f"✅ *{variables['project']}* の *{variables['keyword']}* が復旧しました\n⏰ {variables['detected_at']}"
+        body = f"{variables['project']} の {variables['keyword']} が復旧しました\n{variables['detected_at']}"
     else:
         subject = template.get("subject", "")
-        body = template.get("body", "")
+        # Expand subject
+        for key, value in variables.items():
+            subject = subject.replace(f"{{{key}}}", value)
 
-    # Expand template variables
-    for key, value in variables.items():
-        subject = subject.replace(f"{{{key}}}", value)
-        body = body.replace(f"{{{key}}}", value)
+        # Hardcoded required format
+        body_parts = [subject]
+        if mention:
+            body_parts.append(mention)
+
+        body_parts.extend(
+            [
+                f"検出件数: {variables['count']}",
+                f"タイムスタンプ: {variables['detected_at']}",
+                f"ロググループ: {variables['log_group']}",
+                f"ログストリーム: {variables['stream_name']}",
+                "検出したログ本文:",
+                variables["log_lines"],
+                "検出したログ前のログ:",
+                prev_logs_text,
+            ]
+        )
+        body = "\n".join(body_parts)
+
+    # Expand template variables for RECOVER subject
+    if action == "RECOVER":
+        for key, value in variables.items():
+            subject = subject.replace(f"{{{key}}}", value)
 
     return {"subject": subject, "body": body}
 
@@ -135,11 +167,21 @@ def sns_publish(topic_arn, message, client=None):
     """
     client = client or boto3.client("sns")
 
+    # Format for AWS Chatbot custom notification schema
+    chatbot_payload = {
+        "version": "1.0",
+        "source": "custom",
+        "content": {
+            "title": message["subject"][:100],  # Max 100 characters for title
+            "description": message["body"],
+        },
+    }
+
     try:
         client.publish(
             TopicArn=topic_arn,
             Subject=message["subject"][:100],  # SNS subject limit
-            Message=message["body"],
+            Message=json.dumps(chatbot_payload),
         )
         logger.info("Published notification to %s: %s", topic_arn, message["subject"])
     except Exception:

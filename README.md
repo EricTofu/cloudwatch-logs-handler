@@ -111,6 +111,44 @@ Defines the projects you want to monitor, stream filters, and active keyword mon
 }
 ```
 
+### Full Configuration Sample
+Here is a complete example showing all available configuration options, including overrides and context settings.
+
+```json
+{
+  "pk": "PROJECT",
+  "sk": "project-full-sample",
+  "display_name": "Full Sample Project",
+  "stream_prefix": "app-sample/",
+  "enabled": true,
+  
+  "//": "Optional: Global log group override",
+  "override_log_group": "/aws/lambda/custom-group-override",
+  
+  "//": "Optional: Default context lines to fetch for all monitors in this project",
+  "context_log_lines": 5,
+  
+  "monitors": [
+    {
+      "keyword": ["ERROR", "FATAL"],
+      "severity": "critical",
+      
+      "//": "Optional: Mention specific users/groups in Slack",
+      "mention": "<!here>",
+      
+      "//": "Optional: Override project-level context lines",
+      "context_log_lines": 10,
+      
+      "//": "Optional: Exclude specific patterns for this monitor",
+      "exclude_patterns": ["known-issue-ignore"]
+    }
+  ],
+  
+  "//": "Optional: Project-level exclusions",
+  "exclude_patterns": ["debug-log-noise"]
+}
+```
+
 ## Local Testing & Development
 
 This project was built with Python `pytest` and `moto` for local AWS resource mocking. `uv` is recommended for dependency management.

@@ -14,7 +14,10 @@ from log_monitor.config import (
     update_state_suppress,
 )
 from log_monitor.exclusion import apply_exclusions_regex
-from log_monitor.log_searcher import filter_log_events_with_pagination
+from log_monitor.log_searcher import (
+    filter_log_events_with_pagination,
+    get_previous_log_lines,
+)
 from log_monitor.metrics import put_metric_data
 from log_monitor.notifier import render_message, resolve_sns_topic, resolve_template, sns_publish
 from log_monitor.state import evaluate_state, find_state
@@ -154,9 +157,34 @@ def handler(event, context):
 
             # 6. Send notification if needed
             if action in ("NOTIFY", "RENOTIFY", "RECOVER"):
+                # Fetch context log lines
+                previous_log_lines = []
+                if matches and action in ("NOTIFY", "RENOTIFY"):
+                    context_lines_count = monitor.get("context_log_lines") or project.get("context_log_lines") or 0
+                    if context_lines_count > 0:
+                        first_match = matches[0]
+                        timestamp = first_match.get("timestamp")
+                        stream_name = first_match.get("logStreamName")
+                        if timestamp and stream_name:
+                            previous_log_lines = get_previous_log_lines(
+                                log_group=log_group,
+                                stream_name=stream_name,
+                                timestamp=timestamp,
+                                limit=int(context_lines_count),
+                            )
+
                 topic_arn = resolve_sns_topic(monitor, project, global_config)
                 template = resolve_template(monitor, project, global_config)
-                message = render_message(template, project, monitor, matches, action, global_config, state)
+                message = render_message(
+                    template=template,
+                    project=project,
+                    monitor=monitor,
+                    matches=matches,
+                    action=action,
+                    global_config=global_config,
+                    state=state,
+                    previous_log_lines=previous_log_lines,
+                )
                 sns_publish(topic_arn, message)
                 results["notifications_sent"] += 1
 

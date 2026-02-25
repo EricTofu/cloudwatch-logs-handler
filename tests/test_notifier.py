@@ -86,10 +86,9 @@ class TestRenderMessage:
     def test_render_notify(self):
         template = {
             "subject": "[{severity}] {project} - {keyword} 検出",
-            "body": "{project} で {keyword} が {count}件\n{log_lines}",
         }
         project = {"sk": "project-a", "display_name": "Project Alpha", "source_log_group": "/aws/app/shared-logs"}
-        monitor = {"keyword": "ERROR", "severity": "critical"}
+        monitor = {"keyword": "ERROR", "severity": "critical", "mention": "<!here>"}
         matches = [
             {"message": "ERROR: db failed", "logStreamName": "project-a/s1"},
             {"message": "ERROR: timeout", "logStreamName": "project-a/s1"},
@@ -100,17 +99,30 @@ class TestRenderMessage:
             "defaults": {"severity": "warning"},
         }
 
-        result = render_message(template, project, monitor, matches, "NOTIFY", global_config)
+        result = render_message(
+            template=template,
+            project=project,
+            monitor=monitor,
+            matches=matches,
+            action="NOTIFY",
+            global_config=global_config,
+            previous_log_lines=["INFO: user login", "INFO: process started"],
+        )
         assert "[CRITICAL]" in result["subject"]
         assert "Project Alpha" in result["subject"]
         assert "ERROR" in result["subject"]
-        assert "2件" in result["body"]
-        assert "ERROR: db failed" in result["body"]
+
+        # Check body format
+        assert "<!here>" in result["body"]
+        assert "検出件数: 2" in result["body"]
+        assert "ロググループ: /aws/app/shared-logs" in result["body"]
+        assert "ログストリーム: project-a/s1" in result["body"]
+        assert "検出したログ本文:\nERROR: db failed\nERROR: timeout" in result["body"]
+        assert "検出したログ前のログ:\nINFO: user login\nINFO: process started" in result["body"]
 
     def test_render_recover(self):
         template = {
             "subject": "[{severity}] {project} - {keyword}",
-            "body": "some body",
         }
         project = {"sk": "project-a", "display_name": "Project Alpha"}
         monitor = {"keyword": "ERROR", "severity": "critical"}
@@ -123,11 +135,11 @@ class TestRenderMessage:
         result = render_message(template, project, monitor, [], "RECOVER", global_config)
         assert "RECOVER" in result["subject"]
         assert "復旧" in result["body"]
+        assert "✅" not in result["body"]  # Emojis should be removed
 
     def test_render_with_empty_matches(self):
         template = {
             "subject": "[{severity}] {project}",
-            "body": "Count: {count}\n{log_lines}",
         }
         project = {"sk": "project-a", "display_name": "Project Alpha"}
         monitor = {"keyword": "ERROR", "severity": "warning"}
@@ -138,7 +150,8 @@ class TestRenderMessage:
         }
 
         result = render_message(template, project, monitor, [], "NOTIFY", global_config)
-        assert "0件" not in result["body"] or "(ログなし)" in result["body"]
+        assert "検出件数: 0" in result["body"]
+        assert "(ログなし)" in result["body"]
 
 
 class TestSNSPublish:
@@ -147,10 +160,18 @@ class TestSNSPublish:
         message = {"subject": "Test Subject", "body": "Test Body"}
         sns_publish("arn:aws:sns:...:test-topic", message, client=mock_client)
 
+        import json
+
+        expected_payload = {
+            "version": "1.0",
+            "source": "custom",
+            "content": {"title": "Test Subject", "description": "Test Body"},
+        }
+
         mock_client.publish.assert_called_once_with(
             TopicArn="arn:aws:sns:...:test-topic",
             Subject="Test Subject",
-            Message="Test Body",
+            Message=json.dumps(expected_payload),
         )
 
     def test_publish_truncates_long_subject(self):
@@ -161,6 +182,11 @@ class TestSNSPublish:
 
         call_args = mock_client.publish.call_args[1]
         assert len(call_args["Subject"]) == 100
+
+        import json
+
+        payload = json.loads(call_args["Message"])
+        assert len(payload["content"]["title"]) == 100
 
     def test_publish_failure_raises(self):
         mock_client = MagicMock()

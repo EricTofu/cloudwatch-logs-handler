@@ -88,3 +88,39 @@ def filter_log_events_with_pagination(log_group, stream_prefix, keyword, start_t
     )
 
     return all_events
+
+
+def get_previous_log_lines(log_group, stream_name, timestamp, limit, client=None):
+    """Fetch preceding log lines from the same stream before the given event timestamp.
+
+    Args:
+        log_group: CloudWatch Logs log group name.
+        stream_name: Log stream name.
+        timestamp: Timestamp of the detected event in milliseconds.
+        limit: Number of preceding lines to fetch.
+        client: Optional boto3 logs client.
+
+    Returns:
+        list[str]: Previous log messages.
+    """
+    if limit <= 0 or not stream_name:
+        return []
+
+    client = client or _get_logs_client()
+    try:
+        response = client.get_log_events(
+            logGroupName=log_group,
+            logStreamName=stream_name,
+            endTime=timestamp,
+            limit=limit + 5,  # Add buffer in case multiple events share exact timestamp
+            startFromHead=False,
+        )
+        events = response.get("events", [])
+
+        # Filter strictly before timestamp to avoid including the matched line itself
+        previous_events = [e for e in events if e.get("timestamp", 0) < timestamp]
+
+        return [e["message"].rstrip() for e in previous_events[-limit:]]
+    except Exception as e:
+        logger.warning("Failed to get previous log lines for %s/%s: %s", log_group, stream_name, e)
+        return []

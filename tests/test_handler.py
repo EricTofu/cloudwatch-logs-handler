@@ -20,10 +20,11 @@ def full_setup(dynamodb_table, global_config_item, project_a_item):
 class TestHandler:
     @mock_aws
     @patch("log_monitor.handler.boto3")
+    @patch("log_monitor.handler.get_previous_log_lines")
     @patch("log_monitor.handler.filter_log_events_with_pagination")
     @patch("log_monitor.handler.sns_publish")
     @patch("log_monitor.handler.put_metric_data")
-    def test_full_flow_with_detections(self, mock_put_metric, mock_sns, mock_filter, mock_boto3):
+    def test_full_flow_with_detections(self, mock_put_metric, mock_sns, mock_filter, mock_get_prev_logs, mock_boto3):
         """Test complete flow: detect errors → notify → update state."""
         # Set up DynamoDB
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
@@ -61,7 +62,6 @@ class TestHandler:
                 },
                 "notification_template": {
                     "subject": "[{severity}] {project} - {keyword}",
-                    "body": "{project} で {keyword} が {count}件 検出\n{log_lines}",
                 },
             }
         )
@@ -74,7 +74,7 @@ class TestHandler:
                 "stream_prefix": "project-a",
                 "enabled": True,
                 "monitors": [
-                    {"keyword": ["ERROR", "FATAL"], "severity": "critical"},
+                    {"keyword": ["ERROR", "FATAL"], "severity": "critical", "context_log_lines": 5},
                 ],
             }
         )
@@ -87,6 +87,8 @@ class TestHandler:
             {"message": "ERROR: database failed", "logStreamName": "project-a/s1", "timestamp": 1000},
             {"message": "ERROR: timeout occurred", "logStreamName": "project-a/s1", "timestamp": 2000},
         ]
+
+        mock_get_prev_logs.return_value = ["INFO: connecting", "INFO: connected"]
 
         # Run handler
         result = handler({}, None)
@@ -102,6 +104,12 @@ class TestHandler:
         call_args = mock_sns.call_args_list[0]
         assert "arn:aws:sns:ap-northeast-1:123456789012:critical-alerts" == call_args[0][0]
 
+        # Verify get_prev_logs was called
+        assert mock_get_prev_logs.call_count == 2
+        mock_get_prev_logs.assert_any_call(
+            log_group="/aws/app/shared-logs", stream_name="project-a/s1", timestamp=1000, limit=5
+        )
+
         # Metrics should have been sent
         assert mock_put_metric.call_count == 2
 
@@ -115,10 +123,11 @@ class TestHandler:
 
     @mock_aws
     @patch("log_monitor.handler.boto3")
+    @patch("log_monitor.handler.get_previous_log_lines")
     @patch("log_monitor.handler.filter_log_events_with_pagination")
     @patch("log_monitor.handler.sns_publish")
     @patch("log_monitor.handler.put_metric_data")
-    def test_metrics_disabled(self, mock_put_metric, mock_sns, mock_filter, mock_boto3):
+    def test_metrics_disabled(self, mock_put_metric, mock_sns, mock_filter, mock_get_prev_logs, mock_boto3):
         """Test put_metric_data is conditionally disabled."""
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
         table = dynamodb.create_table(
@@ -170,10 +179,11 @@ class TestHandler:
 
     @mock_aws
     @patch("log_monitor.handler.boto3")
+    @patch("log_monitor.handler.get_previous_log_lines")
     @patch("log_monitor.handler.filter_log_events_with_pagination")
     @patch("log_monitor.handler.sns_publish")
     @patch("log_monitor.handler.put_metric_data")
-    def test_disabled_project_skipped(self, mock_put_metric, mock_sns, mock_filter, mock_boto3):
+    def test_disabled_project_skipped(self, mock_put_metric, mock_sns, mock_filter, mock_get_prev_logs, mock_boto3):
         """Disabled projects should be completely skipped."""
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
         table = dynamodb.create_table(
@@ -228,10 +238,11 @@ class TestHandler:
 
     @mock_aws
     @patch("log_monitor.handler.boto3")
+    @patch("log_monitor.handler.get_previous_log_lines")
     @patch("log_monitor.handler.filter_log_events_with_pagination")
     @patch("log_monitor.handler.sns_publish")
     @patch("log_monitor.handler.put_metric_data")
-    def test_no_detections_noop(self, mock_put_metric, mock_sns, mock_filter, mock_boto3):
+    def test_no_detections_noop(self, mock_put_metric, mock_sns, mock_filter, mock_get_prev_logs, mock_boto3):
         """No detections and status=OK → NOOP, no notifications."""
         dynamodb = boto3.resource("dynamodb", region_name="ap-northeast-1")
         table = dynamodb.create_table(
