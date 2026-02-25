@@ -74,7 +74,7 @@ class TestHandler:
                 "stream_prefix": "project-a",
                 "enabled": True,
                 "monitors": [
-                    {"keyword": "ERROR", "severity": "critical"},
+                    {"keyword": ["ERROR", "FATAL"], "severity": "critical"},
                 ],
             }
         )
@@ -93,22 +93,25 @@ class TestHandler:
 
         # Verify
         assert result["processed_projects"] == 1
-        assert result["total_monitors"] == 1
-        assert result["total_detections"] == 2
-        assert result["notifications_sent"] == 1
+        assert result["total_monitors"] == 2
+        assert result["total_detections"] == 4
+        assert result["notifications_sent"] == 2
 
         # SNS should have been called for NOTIFY
-        mock_sns.assert_called_once()
-        call_args = mock_sns.call_args
+        assert mock_sns.call_count == 2
+        call_args = mock_sns.call_args_list[0]
         assert "arn:aws:sns:ap-northeast-1:123456789012:critical-alerts" == call_args[0][0]
 
         # Metrics should have been sent
-        mock_put_metric.assert_called_once()
+        assert mock_put_metric.call_count == 2
 
         # Check STATE was created in DynamoDB
-        state = table.get_item(Key={"pk": "STATE", "sk": "project-a#ERROR"}).get("Item")
-        assert state is not None
-        assert state["status"] == "ALARM"
+        state_error = table.get_item(Key={"pk": "STATE", "sk": "project-a#ERROR"}).get("Item")
+        assert state_error is not None
+        assert state_error["status"] == "ALARM"
+        state_fatal = table.get_item(Key={"pk": "STATE", "sk": "project-a#FATAL"}).get("Item")
+        assert state_fatal is not None
+        assert state_fatal["status"] == "ALARM"
 
     @mock_aws
     @patch("log_monitor.handler.boto3")

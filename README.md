@@ -99,7 +99,7 @@ Defines the projects you want to monitor, stream filters, and active keyword mon
   "enabled": true,
   "monitors": [
     {
-      "keyword": "ERROR",
+      "keyword": ["ERROR", "FATAL", "Exception"],
       "severity": "critical"
     },
     {

@@ -98,7 +98,19 @@ def handler(event, context):
             search_end_iso,
         )
 
-        monitors = project.get("monitors", [])
+        monitors_config = project.get("monitors", [])
+
+        # Flatten 'keyword' if it is a list of strings
+        monitors = []
+        for m in monitors_config:
+            keywords = m.get("keyword")
+            if isinstance(keywords, list):
+                for kw in keywords:
+                    new_m = m.copy()
+                    new_m["keyword"] = kw
+                    monitors.append(new_m)
+            elif keywords:
+                monitors.append(m)
 
         for monitor in monitors:
             keyword = monitor["keyword"]
