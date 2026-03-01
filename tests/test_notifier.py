@@ -91,6 +91,7 @@ class TestRenderMessage:
         monitor = {"keyword": "ERROR", "severity": "critical", "mention": "<!here>"}
         matches = [
             {"message": "ERROR: db failed", "logStreamName": "project-a/s1", "timestamp": 1709218536000},
+            {"message": "ERROR: db failed", "logStreamName": "project-a/s1", "timestamp": 1709218536500},
             {"message": "ERROR: timeout", "logStreamName": "project-a/s1", "timestamp": 1709218537000},
         ]
         global_config = {
@@ -114,10 +115,10 @@ class TestRenderMessage:
 
         # Check body format
         assert "<!here>" in result["body"]
-        assert "検出件数: 2" in result["body"]
+        assert "検出件数: 3" in result["body"]
         assert "ロググループ: /aws/app/shared-logs" in result["body"]
         assert "ログストリーム: project-a/s1" in result["body"]
-        assert "検出したログ本文:\nERROR: db failed\nERROR: timeout" in result["body"]
+        assert "検出したログ本文:\nERROR: db failed (x2)\nERROR: timeout" in result["body"]
         assert "検出したログ前のログ:\nINFO: user login\nINFO: process started" in result["body"]
 
     def test_render_recover(self):

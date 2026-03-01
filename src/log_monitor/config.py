@@ -4,9 +4,9 @@ import logging
 
 import boto3
 
-logger = logging.getLogger(__name__)
+from log_monitor.constants import TABLE_NAME
 
-TABLE_NAME = "log-monitor"
+logger = logging.getLogger(__name__)
 
 
 def _get_table():

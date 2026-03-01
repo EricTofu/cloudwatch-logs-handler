@@ -90,7 +90,7 @@ def filter_log_events_with_pagination(log_group, stream_prefix, keyword, start_t
     return all_events
 
 
-def get_previous_log_lines(log_group, stream_name, timestamp, limit, client=None):
+def get_previous_log_lines(log_group, stream_name, timestamp, limit, match_message=None, client=None):
     """Fetch preceding log lines from the same stream before the given event timestamp.
 
     Args:
@@ -98,6 +98,7 @@ def get_previous_log_lines(log_group, stream_name, timestamp, limit, client=None
         stream_name: Log stream name.
         timestamp: Timestamp of the detected event in milliseconds.
         limit: Number of preceding lines to fetch.
+        match_message: Optional exact message string to match for precise cut-off.
         client: Optional boto3 logs client.
 
     Returns:
@@ -108,18 +109,49 @@ def get_previous_log_lines(log_group, stream_name, timestamp, limit, client=None
 
     client = client or _get_logs_client()
     try:
-        response = client.get_log_events(
-            logGroupName=log_group,
-            logStreamName=stream_name,
-            endTime=timestamp,
-            limit=limit + 5,  # Add buffer in case multiple events share exact timestamp
-            startFromHead=False,
-        )
-        events = response.get("events", [])
+        # Fetch forward from 1 minute before the target event to ensure we capture bursts
+        start_time = max(0, timestamp - 60000)
+        end_time = timestamp + 1
 
-        # Filter strictly before timestamp to avoid including the matched line itself
-        previous_events = [e for e in events if e.get("timestamp", 0) < timestamp]
+        all_events = []
+        kwargs = {
+            "logGroupName": log_group,
+            "logStreamName": stream_name,
+            "startTime": start_time,
+            "endTime": end_time,
+            "startFromHead": True,
+        }
 
+        # Paginate through results
+        prev_token = None
+        while True:
+            response = client.get_log_events(**kwargs)
+            events = response.get("events", [])
+            all_events.extend(events)
+
+            # get_log_events returns the same nextForwardToken when no more data
+            next_token = response.get("nextForwardToken")
+            if not next_token or next_token == prev_token:
+                break
+            prev_token = next_token
+            kwargs["nextToken"] = next_token
+
+        # Find the exact match backwards
+        target_index = -1
+        for i in range(len(all_events) - 1, -1, -1):
+            e = all_events[i]
+            if e.get("timestamp") == timestamp:
+                # If match_message is provided, require exact match. Otherwise, just match timestamp.
+                if not match_message or e.get("message", "").rstrip() == match_message.rstrip():
+                    target_index = i
+                    break
+
+        if target_index == -1:
+            # Fallback if exact line is not found: filter strictly before timestamp
+            previous_events = [e for e in all_events if e.get("timestamp", 0) < timestamp]
+            return [e["message"].rstrip() for e in previous_events[-limit:]]
+
+        previous_events = all_events[:target_index]
         return [e["message"].rstrip() for e in previous_events[-limit:]]
     except Exception as e:
         logger.warning("Failed to get previous log lines for %s/%s: %s", log_group, stream_name, e)

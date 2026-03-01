@@ -2,14 +2,16 @@
 
 import json
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 
 import boto3
 
+from log_monitor.constants import JST
+
 logger = logging.getLogger(__name__)
 
-# JST timezone
-JST = timezone(timedelta(hours=9))
+# SNS message size limit (256 KB)
+_SNS_MAX_MESSAGE_BYTES = 256 * 1024
 
 
 def resolve_sns_topic(monitor, project, global_config):
@@ -101,7 +103,26 @@ def render_message(template, project, monitor, matches, action, global_config, s
 
     # Extract stream names and log lines from matches
     stream_names = sorted(set(e.get("logStreamName", "") for e in matches)) if matches else []
-    log_lines = "\n".join(e.get("message", "").rstrip() for e in matches[:max_lines])
+    
+    # Deduplicate burst log messages
+    ordered_logs = []
+    log_counts = {}
+    for e in matches:
+        msg = e.get("message", "").rstrip()
+        if msg not in log_counts:
+            ordered_logs.append(msg)
+            log_counts[msg] = 0
+        log_counts[msg] += 1
+
+    formatted_lines = []
+    for msg in ordered_logs[:max_lines]:
+        count = log_counts[msg]
+        if count > 1:
+            formatted_lines.append(f"{msg} (x{count})")
+        else:
+            formatted_lines.append(msg)
+
+    log_lines = "\n".join(formatted_lines)
 
     # Extract previous log lines
     prev_logs_text = "(なし)"
@@ -175,21 +196,34 @@ def sns_publish(topic_arn, message, client=None):
     """
     client = client or boto3.client("sns")
 
+    body = message["body"]
+
     # Format for AWS Chatbot custom notification schema
     chatbot_payload = {
         "version": "1.0",
         "source": "custom",
         "content": {
             "title": message["subject"][:100],  # Max 100 characters for title
-            "description": message["body"],
+            "description": body,
         },
     }
+
+    payload_str = json.dumps(chatbot_payload)
+
+    # Truncate if payload exceeds SNS 256KB limit
+    if len(payload_str.encode("utf-8")) > _SNS_MAX_MESSAGE_BYTES:
+        max_body_bytes = _SNS_MAX_MESSAGE_BYTES - 1024  # Reserve space for JSON envelope
+        truncated_body = body.encode("utf-8")[:max_body_bytes].decode("utf-8", errors="ignore")
+        truncated_body += "\n... (truncated)"
+        chatbot_payload["content"]["description"] = truncated_body
+        payload_str = json.dumps(chatbot_payload)
+        logger.warning("SNS message truncated for topic %s (exceeded 256KB)", topic_arn)
 
     try:
         client.publish(
             TopicArn=topic_arn,
             Subject=message["subject"][:100],  # SNS subject limit
-            Message=json.dumps(chatbot_payload),
+            Message=payload_str,
         )
         logger.info("Published notification to %s: %s", topic_arn, message["subject"])
     except Exception:

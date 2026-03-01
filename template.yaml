@@ -75,6 +75,7 @@ Resources:
             - Effect: Allow
               Action:
                 - logs:FilterLogEvents
+                - logs:GetLogEvents
                 - logs:DescribeLogGroups
                 - logs:DescribeLogStreams
               Resource: "arn:aws:logs:*:*:log-group:*"

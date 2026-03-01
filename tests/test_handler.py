@@ -107,7 +107,7 @@ class TestHandler:
         # Verify get_prev_logs was called
         assert mock_get_prev_logs.call_count == 2
         mock_get_prev_logs.assert_any_call(
-            log_group="/aws/app/shared-logs", stream_name="project-a/s1", timestamp=1000, limit=5
+            log_group="/aws/app/shared-logs", stream_name="project-a/s1", timestamp=1000, limit=5, match_message="ERROR: database failed"
         )
 
         # Metrics should have been sent

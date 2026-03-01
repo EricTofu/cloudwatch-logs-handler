@@ -63,8 +63,10 @@ def evaluate_state(state, matches, monitor, global_config):
     notify_on_recover = defaults.get("notify_on_recover", False)
 
     # Resolve renotify_min: MONITOR → GLOBAL defaults
-    renotify = monitor.get("renotify_min")
-    if renotify is None and "renotify_min" not in monitor:
+    # Use a sentinel to distinguish "key absent" from "key explicitly set to None/null"
+    _UNSET = object()
+    renotify = monitor.get("renotify_min", _UNSET)
+    if renotify is _UNSET:
         renotify = defaults.get("renotify_min")
 
     if count > 0:
